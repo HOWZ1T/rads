@@ -1,0 +1,9 @@
+[package]
+name = "rads"
+version = "0.1.0"
+authors = ["HOWZ1T <dylan.d.randall@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
