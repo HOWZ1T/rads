@@ -170,6 +170,11 @@ impl<T: std::marker::Copy + std::cmp::PartialEq> List<T> {
     }
 
     pub fn remove(&mut self, element: T) -> &mut Self {
+        // nothing to remove
+        if self.count == 0 {
+            return self;
+        }
+
         let mut old_node: NodePtrOpt<T> = None;
         let mut cur_node: NodePtrOpt<T>;
 
@@ -194,6 +199,11 @@ impl<T: std::marker::Copy + std::cmp::PartialEq> List<T> {
             // protect against underflow
             if self.count != 0 {
                 self.count -= 1;
+            }
+
+            // special case, the last node was just removed
+            if self.count == 0 {
+                self.tail = None;
             }
 
             return self;
@@ -228,17 +238,161 @@ impl<T: std::marker::Copy + std::cmp::PartialEq> List<T> {
         self
     }
 
-    pub fn remove_at(&mut self, index: usize) {unimplemented!();}
+    pub fn remove_at(&mut self, index: usize) -> &mut Self {
+        // nothing to remove
+        if self.count == 0 {
+            return self;
+        }
 
-    pub fn reverse(&mut self) {unimplemented!();}
+        if index > self.count {
+            return self;
+        }
 
-    pub fn has(&self, element: T) -> Option<usize> {unimplemented!();}
+        // special case head
+        if index == 0 {
+            let new_head =  match &self.head {
+                Some(head) => {
+                    // protect against underflow
+                    if self.count != 0 {
+                        self.count -= 1;
+                    }
+
+                    match head.borrow_mut().get_next() {
+                        Some(ref h) => {
+                            Some(Rc::clone(h))
+                        },
+                        None => None,
+                    }
+                },
+                None => None, // nothing to remove
+            };
+
+            // move head to the next node, thereby removing the original head element
+            self.head = new_head;
+
+            // special case removed last node in list
+            if self.count == 0 {
+                self.tail = None;
+            }
+
+            return self;
+        }
+
+        let mut old_node: NodePtrOpt<T> = None;
+        let mut cur_node: NodePtrOpt<T>;
+
+        match &self.head {
+            Some(head) => {
+                cur_node = Some(Rc::clone(head));
+            },
+            None => {
+                cur_node = None;
+            }
+        }
+
+        // nothing to remove
+        if cur_node.is_none() {
+            return self;
+        }
+
+        let mut i = 0;
+        for node in self.iter_node() {
+            old_node = Some(Rc::clone(&cur_node.unwrap()));
+            cur_node = Some(Rc::clone(&node));
+
+            if i == index {
+                match cur_node.unwrap().borrow_mut().get_next() {
+                    Some(ref nxt) => {
+                        // normal case, node being removed is not head nor tail
+                        old_node.unwrap().borrow_mut().set_next_node(Some(Rc::clone(nxt)));
+                    },
+                    None => {
+                        // current node is tail, the tail is being removed
+                        old_node.as_ref().unwrap().borrow_mut().set_next_node(None);
+                        self.tail = Some(Rc::clone(&old_node.unwrap()))
+                    },
+                }
+
+                // protect against underflow
+                if self.count != 0 {
+                    self.count -= 1;
+                }
+
+                return self;
+            }
+
+            i += 1;
+        }
+
+        self
+    }
+
+    pub fn reverse(&mut self) -> &mut Self {
+        // nothing to reverse
+        if self.count == 0 {
+            return self;
+        }
+
+        let mut next: NodePtrOpt<T> = None;
+        let mut prev: NodePtrOpt<T> = None;
+        let mut cur: NodePtrOpt<T> = Some(Rc::clone(self.head.as_ref().unwrap()));
+
+        while cur.as_ref().is_some() {
+            // set next to the next node of current
+            next = cur.as_ref().unwrap().borrow_mut().get_next();
+
+            // set current next node to the prev node
+            match &prev {
+                Some(prv) => {
+                    cur.as_ref().unwrap().borrow_mut().set_next_node(Some(Rc::clone(prv)));
+                },
+                None => {
+                    cur.as_ref().unwrap().borrow_mut().set_next_node(None);
+                },
+            }
+
+            // set prev to the current node
+            prev = Some(Rc::clone(cur.as_ref().unwrap()));
+
+            // set current to the next node
+            match &next {
+                Some(nxt) => {
+                    cur = Some(Rc::clone(nxt));
+                },
+
+                None => {
+                    cur = None;
+                },
+            }
+        }
+        self.tail = Some(Rc::clone(self.head.as_ref().unwrap()));
+        self.head = Some(Rc::clone(prev.as_ref().unwrap()));
+
+        self
+    }
+
+    pub fn clear(&mut self) -> &mut Self {
+        self.tail = None;
+        self.head = None;
+        self.count = 0;
+        self
+    }
+
+    pub fn has(&self, element: T) -> bool {
+        for x in self.iter() {
+            if x == element {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.count == 0
+    }
 
     pub fn sort(&mut self) {unimplemented!();}
-
-    pub fn clear(&mut self) {unimplemented!();}
-
-    pub fn is_empty(&self) -> bool {unimplemented!();}
 }
 
 impl<T: std::marker::Copy + std::cmp::PartialEq> From<Vec<T>> for List<T> {
@@ -455,5 +609,63 @@ mod tests {
 
         // tail node case
         assert_eq!(list.remove(1), &mut List::from(vec![6, 3, 4, 5]));
+
+        // only node in list case
+        list = List::from(vec![3]);
+        assert_eq!(list.remove(3), &mut List::from(vec![]));
+
+        // empty list case
+        assert_eq!(list.remove(1).remove(3), &mut List::from(vec![]));
+    }
+
+    #[test]
+    fn list_remove_at() {
+        let mut list = List::from(vec![0, 1, 2, 3]);
+
+        // normal case
+        assert_eq!(list.remove_at(2), &mut List::from(vec![0, 1, 3]));
+
+        // head node case
+        assert_eq!(list.remove_at(0), &mut List::from(vec![1, 3]));
+
+        // tail node case
+        assert_eq!(list.remove_at(1), &mut List::from(vec![1]));
+
+        // one element left case
+        assert_eq!(list.remove_at(0), &mut List::from(vec![]));
+
+        // empty list case
+        assert_eq!(list.remove_at(1), &mut List::from(vec![]));
+    }
+
+    #[test]
+    fn list_reverse() {
+        let mut list = List::from(vec![1, 2, 3]);
+        assert_eq!(list.reverse(), &mut List::from(vec![3, 2, 1]));
+
+        list = List::from(vec![1]);
+        assert_eq!(list.reverse(), &mut List::from(vec![1]));
+    }
+
+    #[test]
+    fn list_clear() {
+        let mut list = List::from(vec![1, 2, 3]);
+        assert_eq!(list.clear(), &mut List::from(vec![]));
+        assert_eq!(list.clear().clear(), &mut List::from(vec![]));
+    }
+
+    #[test]
+    fn list_has() {
+        let mut list = List::from(vec![1, 2, 3]);
+        assert_eq!(list.has(1), true);
+        assert_eq!(list.has(100), false);
+    }
+
+    #[test]
+    fn list_is_empty() {
+        let mut list = List::from(vec![1, 2, 3]);
+        assert_eq!(list.is_empty(), false);
+        list.clear();
+        assert_eq!(list.is_empty(), true);
     }
 }
