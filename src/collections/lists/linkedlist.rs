@@ -169,7 +169,64 @@ impl<T: std::marker::Copy + std::cmp::PartialEq> List<T> {
         self
     }
 
-    pub fn remove(&mut self, element: T) {unimplemented!();}
+    pub fn remove(&mut self, element: T) -> &mut Self {
+        let mut old_node: NodePtrOpt<T> = None;
+        let mut cur_node: NodePtrOpt<T>;
+
+        match &self.head {
+            Some(head) => {
+                cur_node = Some(Rc::clone(head));
+            },
+            None => {
+                cur_node = None;
+            },
+        };
+
+        // if the head is none there is nothing to remove
+        if cur_node.as_ref().is_none() {
+            return self;
+        }
+
+        // special case of wanting to remove the head element
+        if cur_node.as_ref().unwrap().borrow_mut().element == element {
+            self.head = cur_node.unwrap().borrow_mut().get_next();
+
+            // protect against underflow
+            if self.count != 0 {
+                self.count -= 1;
+            }
+
+            return self;
+        }
+
+        for node in self.iter_node() {
+            old_node = Some(Rc::clone(&cur_node.unwrap()));
+            cur_node = Some(Rc::clone(&node));
+
+            if cur_node.as_ref().unwrap().borrow_mut().element == element {
+                match cur_node.unwrap().borrow_mut().get_next() {
+                    Some(ref nxt) => {
+                        // normal case, node being removed is not head nor tail
+                        old_node.unwrap().borrow_mut().set_next_node(Some(Rc::clone(nxt)));
+                    },
+                    None => {
+                        // current node is tail, the tail is being removed
+                        old_node.as_ref().unwrap().borrow_mut().set_next_node(None);
+                        self.tail = Some(Rc::clone(&old_node.unwrap()))
+                    },
+                }
+
+                // protect against underflow
+                if self.count != 0 {
+                    self.count -= 1;
+                }
+
+                return self;
+            }
+        }
+
+        self
+    }
 
     pub fn remove_at(&mut self, index: usize) {unimplemented!();}
 
@@ -380,5 +437,23 @@ mod tests {
         assert_eq!(list, List::from(vec![10, 0, 1, 2, 3, 4, 5, 6, 7]));
         list.insert(3, 100);
         assert_eq!(list, List::from(vec![10, 0, 1, 100, 2, 3, 4, 5, 6, 7]));
+    }
+
+    #[test]
+    fn list_remove() {
+        let mut list = List::from(vec![0, 6, 1, 2, 3, 4, 5, 1]);
+
+        // normal case
+        assert_eq!(list.remove(2), &mut List::from(vec![0, 6, 1, 3, 4, 5, 1]));
+
+        // head node case
+        assert_eq!(list.remove(0), &mut List::from(vec![6, 1, 3, 4, 5, 1]));
+
+        // duplicate case
+        // expected behaviour for duplicate case is that the first occurrence of the duplicate element should be removed
+        assert_eq!(list.remove(1), &mut List::from(vec![6, 3, 4, 5, 1]));
+
+        // tail node case
+        assert_eq!(list.remove(1), &mut List::from(vec![6, 3, 4, 5]));
     }
 }
